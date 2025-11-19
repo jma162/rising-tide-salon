@@ -6,6 +6,7 @@ export default function Home() {
   const [isScrolled, setIsScrolled] = useState(false);
   const [videoError, setVideoError] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [videoLoaded, setVideoLoaded] = useState(false);
 
   useEffect(() => {
     const handleScroll = () => {
@@ -25,29 +26,40 @@ export default function Home() {
       video.setAttribute('x5-video-player-type', 'h5');
       video.setAttribute('x5-video-player-fullscreen', 'false');
       
+      // Optimize for mobile: load metadata first, then play
+      const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+      if (isMobile) {
+        video.preload = 'metadata'; // Only load metadata on mobile
+      }
+      
       const handleError = () => {
         console.error('Video failed to load');
         setVideoError(true);
+        setVideoLoaded(false);
       };
       
-      const handleLoadedData = async () => {
-        console.log('Video loaded successfully');
+      const handleCanPlay = async () => {
+        console.log('Video can play');
+        setVideoLoaded(true);
         setVideoError(false);
-        // Force play on mobile devices
+        // Try to play
         try {
           await video.play();
         } catch (error) {
           console.log('Autoplay prevented, will show on user interaction');
-          // Don't set error, video is loaded but needs user interaction
         }
       };
       
       video.addEventListener('error', handleError);
-      video.addEventListener('loadeddata', handleLoadedData);
+      video.addEventListener('canplay', handleCanPlay);
       
       // Try to play on user interaction (scroll, touch, etc.)
       const tryPlay = async () => {
         try {
+          if (video.readyState < 2) {
+            // If video hasn't loaded enough, wait a bit
+            video.load();
+          }
           await video.play();
         } catch (e) {
           // Ignore autoplay errors
@@ -59,12 +71,12 @@ export default function Home() {
       
       return () => {
         video.removeEventListener('error', handleError);
-        video.removeEventListener('loadeddata', handleLoadedData);
+        video.removeEventListener('canplay', handleCanPlay);
         window.removeEventListener('touchstart', tryPlay);
         window.removeEventListener('scroll', tryPlay);
       };
     }
-  }, []);
+  }, [videoLoaded]);
 
   return (
     <div className="min-h-screen bg-white">
@@ -161,17 +173,18 @@ export default function Home() {
           loop
           muted
           playsInline
-          preload="auto"
-          className="absolute inset-0 w-full h-full object-cover z-0"
+          preload="metadata"
+          className={`absolute inset-0 w-full h-full object-cover z-0 transition-opacity duration-700 ${videoLoaded ? 'opacity-100' : 'opacity-0'}`}
           style={{ zIndex: 0 }}
           onError={() => setVideoError(true)}
+          onCanPlay={() => setVideoLoaded(true)}
         >
           <source src="https://videos.pexels.com/video-files/3044083/3044083-hd_1920_1080_25fps.mp4" type="video/mp4" />
           <source src="https://videos.pexels.com/video-files/3045163/3045163-hd_1920_1080_25fps.mp4" type="video/mp4" />
         </video>
         
-        {/* Fallback background gradient - shows if video fails */}
-        <div className={`absolute inset-0 bg-gradient-to-br from-[#f5f5f5] via-white to-[#fafafa] z-0 transition-opacity duration-500 ${videoError ? 'opacity-100' : 'opacity-0'}`}></div>
+        {/* Fallback background gradient - shows immediately, fades when video loads */}
+        <div className={`absolute inset-0 bg-gradient-to-br from-[#f5f5f5] via-white to-[#fafafa] z-0 transition-opacity duration-700 ${videoLoaded && !videoError ? 'opacity-0' : 'opacity-100'}`}></div>
         
         {/* Overlay for better text readability */}
         <div className="absolute inset-0 bg-gradient-to-br from-white/80 via-white/60 to-white/80 z-[1]"></div>
